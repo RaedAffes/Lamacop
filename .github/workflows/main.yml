@@ -13,17 +13,37 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Resolve project directories
+        run: |
+          if [ -d "frontend" ]; then
+            echo "FRONTEND_DIR=frontend" >> $GITHUB_ENV
+          elif [ -d "lamacop/frontend" ]; then
+            echo "FRONTEND_DIR=lamacop/frontend" >> $GITHUB_ENV
+          else
+            echo "Frontend directory not found" >&2
+            exit 1
+          fi
+
+          if [ -d "backend" ]; then
+            echo "BACKEND_DIR=backend" >> $GITHUB_ENV
+          elif [ -d "lamacop/backend" ]; then
+            echo "BACKEND_DIR=lamacop/backend" >> $GITHUB_ENV
+          else
+            echo "Backend directory not found" >&2
+            exit 1
+          fi
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
 
       - name: Install frontend dependencies
-        working-directory: frontend
+        working-directory: ${{ env.FRONTEND_DIR }}
         run: npm install
 
       - name: Build frontend
-        working-directory: lamacop/frontend
+        working-directory: ${{ env.FRONTEND_DIR }}
         run: npm run build
 
       - name: Set up Python
@@ -32,13 +52,13 @@ jobs:
           python-version: "3.12"
 
       - name: Install backend dependencies
-        working-directory: lamacop/backend
+        working-directory: ${{ env.BACKEND_DIR }}
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Validate backend imports
-        working-directory: lamacop/backend
+        working-directory: ${{ env.BACKEND_DIR }}
         run: python -c "from app.main import app; print(app.title)"
 
       - name: Set up Docker Buildx
@@ -53,14 +73,14 @@ jobs:
       - name: Build and push frontend image
         uses: docker/build-push-action@v6
         with:
-          context: ./frontend
+          context: ./${{ env.FRONTEND_DIR }}
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/lamacop-frontend:latest
 
       - name: Build and push backend image
         uses: docker/build-push-action@v6
         with:
-          context: ./backend
+          context: ./${{ env.BACKEND_DIR }}
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/lamacop-backend:latest
 
