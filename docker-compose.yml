@@ -1,0 +1,73 @@
+version: '3.9'
+
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0-alpine
+    container_name: lamacop-mysql
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root_password}
+      MYSQL_DATABASE: ${DB_NAME:-lamacop}
+      MYSQL_USER: ${DB_USER:-lamacop_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-lamacop_pass}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+    networks:
+      - lamacop-network
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lamacop-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST: mysql
+      DB_USER: ${DB_USER:-lamacop_user}
+      DB_PASSWORD: ${DB_PASSWORD:-lamacop_pass}
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-lamacop}
+      FRONTEND_URL: ${FRONTEND_URL:-20.111.60.184}
+      DEBUG: "true"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    networks:
+      - lamacop-network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Next.js Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: lamacop-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - lamacop-network
+    environment:
+      NEXT_PUBLIC_API_URL: http://20.111.60.184/api/v1
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  lamacop-network:
+    driver: bridge
