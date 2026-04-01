@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     frontend_url: str = "http://20.111.60.184/"
     
     class Config:
-        env_file = ".env"
+        env_file = ".env.example"
         case_sensitive = False
         extra = "allow"
 
