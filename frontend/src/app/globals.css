@@ -1,0 +1,170 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+
+  /* Azure/Fluent-style blue scale (primary: #0078D4) */
+  --brand-50: 222 236 249; /* #DEECF9 */
+  --brand-100: 199 224 244; /* #C7E0F4 */
+  --brand-200: 173 212 239; /* ~#ADD4EF */
+  --brand-300: 110 189 242; /* ~#6EBDF2 */
+  --brand-400: 64 169 255; /* #40A9FF */
+  --brand-500: 0 120 212; /* #0078D4 */
+  --brand-600: 0 90 158; /* #005A9E */
+  --brand-700: 0 69 120; /* #004578 */
+  --brand-800: 0 53 91; /* #00355B */
+  --brand-900: 0 37 65; /* #002541 */
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
+
+::selection {
+  background: rgb(var(--brand-200) / 0.9);
+}
+
+/* Hide Next.js DevTools floating indicator ("N" badge) */
+[data-nextjs-dev-tools-button],
+[data-next-badge-root] {
+  display: none !important;
+}
+
+/* utility container close to common landing-page layouts */
+.container {
+  @apply mx-auto w-full max-w-6xl px-4;
+}
+
+@layer utilities {
+  .bg-azure-hero {
+    background-color: #fff;
+    background-image:
+      radial-gradient(
+        900px circle at 20% 0%,
+        rgb(var(--brand-200) / 0.7),
+        transparent 60%
+      ),
+      radial-gradient(
+        800px circle at 80% 30%,
+        rgb(var(--brand-100) / 0.95),
+        transparent 55%
+      ),
+      radial-gradient(
+        900px circle at 50% 85%,
+        rgb(var(--brand-300) / 0.25),
+        transparent 55%
+      ),
+      linear-gradient(
+        to bottom,
+        rgb(var(--brand-50) / 1),
+        rgb(255 255 255 / 1) 60%
+      );
+    background-size: 200% 200%;
+    background-position: 0% 50%;
+  }
+
+  /* Small floating air-bubbles in the background */
+  .azure-bubbles {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .azure-bubbles::before,
+  .azure-bubbles::after {
+    content: "";
+    position: absolute;
+    inset: -25%;
+    pointer-events: none;
+    background-repeat: no-repeat;
+    opacity: 0.68;
+  }
+
+  /* Many small bubbles */
+  .azure-bubbles::before {
+    background-image:
+      radial-gradient(circle, rgb(var(--brand-300) / 0.18) 0 4px, transparent 5px),
+      radial-gradient(circle, rgb(var(--brand-200) / 0.18) 0 3px, transparent 4px),
+      radial-gradient(circle, rgb(var(--brand-300) / 0.14) 0 5px, transparent 6px),
+      radial-gradient(circle, rgb(var(--brand-200) / 0.16) 0 3px, transparent 4px),
+      radial-gradient(circle, rgb(var(--brand-300) / 0.12) 0 4px, transparent 5px),
+      radial-gradient(circle, rgb(var(--brand-200) / 0.14) 0 2.5px, transparent 3.5px),
+      radial-gradient(circle, rgb(var(--brand-300) / 0.14) 0 3.5px, transparent 4.5px),
+      radial-gradient(circle, rgb(var(--brand-200) / 0.16) 0 2.5px, transparent 3.5px),
+      radial-gradient(circle, rgb(var(--brand-300) / 0.16) 0 4px, transparent 5px),
+      radial-gradient(circle, rgb(var(--brand-200) / 0.18) 0 3px, transparent 4px),
+      radial-gradient(circle, rgb(var(--brand-300) / 0.12) 0 5px, transparent 6px),
+      radial-gradient(circle, rgb(var(--brand-200) / 0.14) 0 3px, transparent 4px),
+      radial-gradient(circle, rgb(var(--brand-300) / 0.14) 0 4px, transparent 5px),
+      radial-gradient(circle, rgb(var(--brand-200) / 0.16) 0 2.5px, transparent 3.5px);
+    background-size: 100% 100%;
+    background-position:
+      8% 125%,
+      18% 140%,
+      32% 132%,
+      46% 148%,
+      62% 138%,
+      74% 150%,
+      86% 130%,
+      94% 145%,
+      6% 160%,
+      22% 158%,
+      40% 166%,
+      58% 162%,
+      70% 170%,
+      82% 160%,
+      96% 168%;
+    animation: azure-bubbles-rise 14s linear infinite;
+  }
+
+  /* Fewer medium bubbles drifting a bit */
+  .azure-bubbles::after {
+    opacity: 0.50;
+    background-image:
+      radial-gradient(circle, rgb(var(--brand-300) / 0.14) 0 8px, transparent 9px),
+      radial-gradient(circle, rgb(var(--brand-200) / 0.16) 0 6px, transparent 7px),
+      radial-gradient(circle, rgb(var(--brand-300) / 0.12) 0 7px, transparent 8px),
+      radial-gradient(circle, rgb(var(--brand-200) / 0.14) 0 6.5px, transparent 7.5px);
+    background-size: 100% 100%;
+    background-position:
+      15% 130%,
+      55% 155%,
+      88% 138%,
+      35% 170%;
+    animation: azure-bubbles-rise 22s linear infinite, azure-bubbles-drift 8s ease-in-out infinite;
+  }
+}
+
+@keyframes azure-bubbles-rise {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(0, -30%, 0);
+  }
+}
+
+@keyframes azure-bubbles-drift {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(1.5%, -6%, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .azure-bubbles::before,
+  .azure-bubbles::after {
+    animation: none !important;
+  }
+}

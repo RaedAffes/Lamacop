@@ -1,0 +1,4 @@
+- Verify requirements before scaffolding.
+- Keep the app frontend-only (no backend).
+- Place all Next.js code under `frontend/`.
+- Prefer small, focused components in `frontend/src/components`.
