@@ -238,6 +238,7 @@ export async function registerUser(input: {
         const err = (await response.json()) as { detail?: string }
         if (typeof err.detail === "string" && err.detail) {
           message = err.detail
+          
         }
       } catch {
         // Keep default message when backend error body is not JSON.
