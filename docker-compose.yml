@@ -21,6 +21,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://20.111.60.184:8000/api/v1
     container_name: lamacop-frontend
     restart: unless-stopped
     env_file:
