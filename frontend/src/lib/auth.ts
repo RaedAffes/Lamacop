@@ -107,6 +107,16 @@ function createId() {
   return `${Date.now()}_${Math.random().toString(16).slice(2)}`
 }
 
+function getApiBaseUrl() {
+  return (process.env.NEXT_PUBLIC_API_URL || "/api/v1").replace(/\/$/, "")
+}
+
+function mapFrontendRoleToBackendRole(role: UserRole): "student" | "researcher" | "admin" {
+  if (role === "admin") return "admin"
+  if (role === "team") return "researcher"
+  return "student"
+}
+
 export function getCurrentUser(): PublicUser | null {
   const session = readSession()
   if (!session?.email) return null
@@ -181,14 +191,14 @@ export function canManageAllContent(user: PublicUser | null): boolean {
   return isAdmin(user)
 }
 
-export function registerUser(input: {
+export async function registerUser(input: {
   firstName: string
   lastName: string
   email: string
   password: string
   role: UserRole
   institution?: string
-}): { user: PublicUser } | { error: string } {
+}): Promise<{ user: PublicUser } | { error: string }> {
   if (!isBrowser()) return { error: "Registration is only available in the browser." }
 
   const email = normalizeEmail(input.email)
@@ -203,6 +213,40 @@ export function registerUser(input: {
   const role: UserRole = isFirstAccount ? "admin" : input.role
   const status: AccountStatus =
     role === "team" && !isFirstAccount ? "pending" : "active"
+
+  const fullName = `${input.firstName} ${input.lastName}`.trim()
+  const backendRole = mapFrontendRoleToBackendRole(role)
+
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/users`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email,
+        name: fullName,
+        password: input.password,
+        role: backendRole,
+        bio: input.institution?.trim() || null,
+      }),
+    })
+
+    if (!response.ok) {
+      let message = "Failed to create user in backend database."
+      try {
+        const err = (await response.json()) as { detail?: string }
+        if (typeof err.detail === "string" && err.detail) {
+          message = err.detail
+        }
+      } catch {
+        // Keep default message when backend error body is not JSON.
+      }
+      return { error: message }
+    }
+  } catch {
+    return { error: "Cannot reach backend API. Check backend container and NEXT_PUBLIC_API_URL." }
+  }
 
   const newUser: StoredUser = {
     id: createId(),

@@ -32,12 +32,12 @@ export default function RegisterPage() {
           <div className="mx-auto max-w-lg rounded-xl border border-slate-200 bg-white p-6">
             <form
               className="space-y-4"
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault()
                 setError(null)
                 setSubmitting(true)
 
-                const result = registerUser({
+                const result = await registerUser({
                   firstName: form.firstName,
                   lastName: form.lastName,
                   email: form.email,
