@@ -1,24 +1,4 @@
 services:
-  # MySQL Database
-  mysql:
-    image: mysql:8.0
-    container_name: lamacop-mysql
-    restart: unless-stopped
-    env_file:
-      - ./backend/.env.example
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
-      interval: 10s
-      timeout: 20s
-      retries: 20
-      start_period: 40s
-    networks:
-      - lamacop-network
-
   # FastAPI Backend
   backend:
     build:
@@ -31,15 +11,10 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DB_HOST: mysql
-    depends_on:
-      mysql:
-        condition: service_healthy
-    volumes:
-      - ./backend:/app
+      FRONTEND_URL: http://20.111.60.184
     networks:
       - lamacop-network
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
 
   # Next.js Frontend
   frontend:
@@ -56,10 +31,6 @@ services:
       - backend
     networks:
       - lamacop-network
-
-volumes:
-  mysql_data:
-    driver: local
 
 networks:
   lamacop-network:
