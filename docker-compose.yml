@@ -7,11 +7,9 @@ services:
     container_name: lamacop-backend
     restart: unless-stopped
     env_file:
-      - ./backend/.env.example
+      - ./backend/.env
     ports:
       - "8000:8000"
-    environment:
-      FRONTEND_URL: http://20.111.60.184
     networks:
       - lamacop-network
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
@@ -21,12 +19,11 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+
       args:
-        NEXT_PUBLIC_API_URL: http://20.111.60.184:8000/api/v1
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
     container_name: lamacop-frontend
     restart: unless-stopped
-    env_file:
-      - ./backend/.env.example
     ports:
       - "80:80"
     depends_on:
