@@ -4,13 +4,11 @@ from sqlalchemy.orm import Session
 from typing import List
 from app.config import get_settings
 from app.database import (
-    get_db, Base, engine,
+    get_db, Base, init_db,
     User, ResearchProject, TeamMember, Publication, EquipmentItem, NewsItem
 )
 from app import schemas
-
-# Create tables
-Base.metadata.create_all(bind=engine)
+from app.security import hash_password, verify_password
 
 settings = get_settings()
 app = FastAPI(
@@ -18,6 +16,8 @@ app = FastAPI(
     description="Backend API for LamaCop Research Lab",
     version="1.0.0"
 )
+
+init_db()
 
 # Add CORS middleware
 app.add_middleware(
@@ -69,7 +69,7 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     new_user = User(
         email=user.email,
         name=user.name,
-        password_hash=user.password,  # TODO: Hash password with bcrypt
+        password_hash=hash_password(user.password),
         role=user.role,
         bio=user.bio,
         image_url=user.image_url
@@ -78,6 +78,34 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
     return new_user
+
+
+@app.post(f"{settings.api_prefix}/auth/login", response_model=schemas.LoginResponse)
+def login_user(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
+    """Authenticate user with email/password and return profile."""
+    user = db.query(User).filter(User.email == payload.email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    password_ok = False
+    try:
+        password_ok = verify_password(payload.password, user.password_hash)
+    except Exception:
+        # Backward compatibility for old rows that were stored in plain text.
+        password_ok = payload.password == user.password_hash
+        if password_ok:
+            user.password_hash = hash_password(payload.password)
+            db.commit()
+
+    if not password_ok:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    return schemas.LoginResponse(
+        id=user.id,
+        email=user.email,
+        name=user.name,
+        role=user.role,
+    )
 
 
 @app.put(f"{settings.api_prefix}/users/{{user_id}}", response_model=schemas.User)

@@ -52,6 +52,18 @@ class User(UserBase):
         from_attributes = True
 
 
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class LoginResponse(BaseModel):
+    id: int
+    email: EmailStr
+    name: str
+    role: UserRole
+
+
 # Research Project Schemas
 class ResearchProjectBase(BaseModel):
     title: str

@@ -1,10 +1,17 @@
 from pydantic_settings import BaseSettings
+from pydantic import Field
 from functools import lru_cache
 from sqlalchemy.engine import URL
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables"""
+
+    # Optional full SQLAlchemy URL. If provided, this takes precedence.
+    database_url_raw: str | None = Field(default=None, alias="DATABASE_URL")
+
+    # SQLAlchemy driver for composed URL mode.
+    db_driver: str = "mysql+pymysql"
     
     # Database
     db_host: str
@@ -25,17 +32,18 @@ class Settings(BaseSettings):
         extra = "allow"
 
     @property
-    def database_url(self) -> str:
-        """Construct MySQL connection string"""
-        return str(
-            URL.create(
-                "mysql+mysqlconnector",
-                username=self.db_user,
-                password=self.db_password,
-                host=self.db_host,
-                port=self.db_port,
-                database=self.db_name,
-            )
+    def database_url(self):
+        """Get database URL from DATABASE_URL or compose it from DB_* variables."""
+        if self.database_url_raw:
+            return self.database_url_raw
+
+        return URL.create(
+            self.db_driver,
+            username=self.db_user,
+            password=self.db_password,
+            host=self.db_host,
+            port=self.db_port,
+            database=self.db_name,
         )
 
 

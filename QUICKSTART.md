@@ -23,7 +23,7 @@
 
 ## Option 1: Docker Compose (Recommended for Full Stack)
 
-Run all services (MySQL + Backend + Frontend) with one command:
+Run services (Backend + Frontend) with one command. MySQL runs on your host machine:
 
 ```bash
 # From project root
@@ -37,7 +37,6 @@ docker-compose --env-file .env.compose up -d
 ```bash
 # View logs
 docker-compose logs -f backend
-docker-compose logs -f mysql
 docker-compose logs -f frontend
 
 # Check status
@@ -51,7 +50,7 @@ docker-compose down
 - **Frontend**: http://localhost
 - **Backend API**: http://localhost:8000
 - **API Docs**: http://localhost:8000/docs
-- **MySQL**: localhost:3306 (user: lamacop_user, pass: lamacop_pass)
+- **MySQL**: your local MySQL service on localhost:3306 (or your configured host port)
 
 ---
 

@@ -1,14 +1,24 @@
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Enum, ForeignKey, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.pool import NullPool
 from datetime import datetime
 from enum import Enum as PyEnum
 from app.config import get_settings
 
-settings = get_settings()
-engine = create_engine(settings.database_url, echo=False)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+engine = None
+SessionLocal = None
+
+
+def init_db():
+    global engine, SessionLocal
+    settings = get_settings()
+    engine = create_engine(settings.database_url, echo=False, poolclass=NullPool)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    Base.metadata.create_all(bind=engine)
+    return engine
 
 
 # Enums
