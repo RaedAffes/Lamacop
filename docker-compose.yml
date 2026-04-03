@@ -11,6 +11,8 @@ services:
       - ./backend/.env
     ports:
       - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - lamacop-network
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000

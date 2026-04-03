@@ -2,6 +2,8 @@ const USERS_KEY = "lamacop.users"
 const SESSION_KEY = "lamacop.session"
 export const AUTH_STORAGE_EVENT = "lamacop-auth"
 
+import { upsertTeamMemberByEmail } from "@/lib/content"
+
 export type UserRole = "admin" | "team" | "user"
 export type AccountStatus = "active" | "pending"
 
@@ -146,6 +148,20 @@ export function approveTeamUser(userId: string): { ok: true } | { error: string 
 
   users[idx] = { ...users[idx], status: "active" }
   writeUsers(users)
+
+  const approvedUser = users[idx]
+  const fullName = [approvedUser.firstName, approvedUser.lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim() || approvedUser.email
+  const position = approvedUser.institution?.trim() || "Research Team"
+
+  upsertTeamMemberByEmail({
+    name: fullName,
+    position,
+    email: approvedUser.email,
+  })
+
   notifyAuthChange()
   return { ok: true }
 }

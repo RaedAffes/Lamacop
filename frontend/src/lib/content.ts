@@ -175,6 +175,36 @@ export function addTeamMember(input: {
   return next
 }
 
+export function upsertTeamMemberByEmail(input: {
+  name: string
+  position: string
+  email: string
+}): TeamMember {
+  const email = input.email.trim().toLowerCase()
+  const list = getTeamMembers()
+  const idx = list.findIndex((member) => (member.email || "").trim().toLowerCase() === email)
+
+  if (idx !== -1) {
+    const updated: TeamMember = {
+      ...list[idx],
+      name: input.name.trim(),
+      position: input.position.trim(),
+      email,
+      updatedAt: new Date().toISOString(),
+    }
+    const next = [...list]
+    next[idx] = updated
+    writeList(TEAM_KEY, next)
+    return updated
+  }
+
+  return addTeamMember({
+    name: input.name,
+    position: input.position,
+    email,
+  })
+}
+
 export function updateTeamMember(
   id: string,
   patch: Partial<Pick<TeamMember, "name" | "position" | "email" | "photo">>
