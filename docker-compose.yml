@@ -1,6 +1,7 @@
 services:
   # FastAPI Backend
   backend:
+    image: raedaffes/lamacop-backend:latest
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -16,6 +17,7 @@ services:
 
   # Next.js Frontend
   frontend:
+    image: raedaffes/lamacop-frontend:latest
     build:
       context: ./frontend
       dockerfile: Dockerfile
