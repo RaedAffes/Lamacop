@@ -1,5 +1,3 @@
-const USERS_KEY = "lamacop.users"
-const SESSION_KEY = "lamacop.session"
 export const AUTH_STORAGE_EVENT = "lamacop-auth"
 
 import { upsertTeamMemberByEmail } from "@/lib/content"
@@ -7,173 +5,558 @@ import { upsertTeamMemberByEmail } from "@/lib/content"
 export type UserRole = "admin" | "team" | "user"
 export type AccountStatus = "active" | "pending"
 
-export type StoredUser = {
+export type PublicUser = {
   id: string
   firstName: string
   lastName: string
   email: string
-  password: string
   role: UserRole
   status: AccountStatus
   institution?: string
   createdAt: string
+  updatedAt: string
 }
 
-export type PublicUser = Omit<StoredUser, "password">
-
-type Session = {
+type BackendUser = {
+  id: number
   email: string
-  createdAt: string
+  first_name: string | null
+  last_name: string | null
+  institution: string | null
+  role: UserRole
+  status: AccountStatus
+  created_at: string
+  updated_at: string
 }
 
-function isBrowser() {
-  return typeof window !== "undefined" && typeof localStorage !== "undefined"
-}
-
-function notifyAuthChange() {
-  if (!isBrowser()) return
-  window.dispatchEvent(new Event(AUTH_STORAGE_EVENT))
-}
-
-function safeParseJson<T>(value: string | null, fallback: T): T {
-  if (!value) return fallback
-  try {
-    return JSON.parse(value) as T
-  } catch {
-    return fallback
+declare const process: {
+  env: {
+    NEXT_PUBLIC_API_URL?: string
   }
 }
 
-function readUsers(): StoredUser[] {
-  if (!isBrowser()) return []
-  const raw = safeParseJson<Array<Partial<StoredUser> & { role?: string }>>(
-    localStorage.getItem(USERS_KEY),
-    []
-  )
+let currentUser: PublicUser | null = null
 
-  return raw
-    .filter((u) => typeof u.email === "string" && typeof u.id === "string")
-    .map((u) => {
-      const role =
-        u.role === "admin" || u.role === "team" || u.role === "user"
-          ? u.role
-          : "user"
-      const status = u.status === "pending" || u.status === "active" ? u.status : "active"
-
-      return {
-        id: u.id as string,
-        firstName: (u.firstName ?? "") as string,
-        lastName: (u.lastName ?? "") as string,
-        email: (u.email ?? "") as string,
-        password: (u.password ?? "") as string,
-        role,
-        status,
-        institution: (u.institution ?? undefined) as string | undefined,
-        createdAt: (u.createdAt ?? new Date().toISOString()) as string,
-      }
-    })
-}
-
-function writeUsers(users: StoredUser[]) {
-  if (!isBrowser()) return
-  localStorage.setItem(USERS_KEY, JSON.stringify(users))
-}
-
-function readSession(): Session | null {
-  if (!isBrowser()) return null
-  return safeParseJson<Session | null>(localStorage.getItem(SESSION_KEY), null)
-}
-
-function writeSession(session: Session) {
-  if (!isBrowser()) return
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session))
-}
-
-function clearSession() {
-  if (!isBrowser()) return
-  localStorage.removeItem(SESSION_KEY)
-}
-
-function toPublicUser(user: StoredUser): PublicUser {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { password, ...rest } = user
-  return rest
+function notifyAuthChange() {
+  if (typeof window === "undefined") return
+  window.dispatchEvent(new Event(AUTH_STORAGE_EVENT))
 }
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase()
 }
 
-function createId() {
-  // Enough uniqueness for client-only demo usage.
-  return `${Date.now()}_${Math.random().toString(16).slice(2)}`
+function getApiBaseUrl() {
+  return (process.env.NEXT_PUBLIC_API_URL || "/api/v1").replace(/\/$/, "")
+}
+
+function mapFrontendRoleToBackendRole(role: UserRole): UserRole {
+  if (role === "admin") return "admin"
+  if (role === "team") return "team"
+  return "user"
+}
+
+async function getBackendUserByEmail(email: string): Promise<BackendUser | null> {
+  const response = await fetch(`${getApiBaseUrl()}/users/by-email/${encodeURIComponent(email)}`)
+  if (response.status === 404) return null
+  if (!response.ok) return null
+  return (await response.json()) as BackendUser
+}
+
+function fromBackendUser(user: BackendUser): PublicUser {
+  return {
+    id: String(user.id),
+    firstName: user.first_name ?? "",
+    lastName: user.last_name ?? "",
+    email: user.email,
+    role: user.role,
+    status: user.status,
+    institution: user.institution ?? undefined,
+    createdAt: user.created_at,
+    updatedAt: user.updated_at,
+  }
+}
+
+async function fetchAllUsersFromBackend(): Promise<PublicUser[]> {
+  const pageSize = 100
+  const users: PublicUser[] = []
+  let skip = 0
+
+  while (true) {
+    const response = await fetch(`${getApiBaseUrl()}/users?skip=${skip}&limit=${pageSize}`)
+    if (!response.ok) {
+      throw new Error("Failed to load users from backend.")
+    }
+
+    const batch = (await response.json()) as BackendUser[]
+    users.push(...batch.map(fromBackendUser))
+    if (batch.length < pageSize) break
+    skip += pageSize
+  }
+
+  return users
+}
+
+export function getCurrentUser(): PublicUser | null {
+  return currentUser
+}
+
+export async function getAllUsers(): Promise<PublicUser[]> {
+  return fetchAllUsersFromBackend()
+}
+
+export async function getPendingTeamUsers(): Promise<PublicUser[]> {
+  const users = await fetchAllUsersFromBackend()
+  return users.filter((user) => user.role === "team" && user.status === "pending")
+}
+
+export async function approveTeamUser(userId: string): Promise<{ ok: true } | { error: string }> {
+  const response = await fetch(`${getApiBaseUrl()}/users/${userId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ status: "active" }),
+  })
+
+  if (!response.ok) {
+    let message = "Approval failed."
+    try {
+      const err = (await response.json()) as { detail?: string }
+      if (typeof err.detail === "string" && err.detail) {
+        message = err.detail
+      }
+    } catch {
+      // Keep default message when backend error body is not JSON.
+    }
+    return { error: message }
+  }
+
+  if (currentUser && currentUser.id === userId) {
+    currentUser = { ...currentUser, status: "active", updatedAt: new Date().toISOString() }
+  }
+  notifyAuthChange()
+  return { ok: true }
+}
+
+export async function rejectUser(userId: string): Promise<{ ok: true } | { error: string }> {
+  const response = await fetch(`${getApiBaseUrl()}/users/${userId}`, {
+    method: "DELETE",
+  })
+
+  if (!response.ok) {
+    let message = "Rejection failed."
+    try {
+      const err = (await response.json()) as { detail?: string }
+      if (typeof err.detail === "string" && err.detail) {
+        message = err.detail
+      }
+    } catch {
+      // Keep default message when backend error body is not JSON.
+    }
+    return { error: message }
+  }
+
+  if (currentUser && currentUser.id === userId) {
+    currentUser = null
+  }
+  notifyAuthChange()
+  return { ok: true }
+}
+
+export function isAdmin(user: PublicUser | null): boolean {
+  return !!user && user.role === "admin" && user.status === "active"
+}
+
+export function isApprovedTeamMember(user: PublicUser | null): boolean {
+  return !!user && user.role === "team" && user.status === "active"
+}
+
+export function canContact(user: PublicUser | null): boolean {
+  return !!user
+}
+
+export function canAddResearch(user: PublicUser | null): boolean {
+  return isAdmin(user) || isApprovedTeamMember(user)
+}
+
+export function canAddPublications(user: PublicUser | null): boolean {
+  return isAdmin(user) || isApprovedTeamMember(user)
+}
+
+export function canAddEquipment(user: PublicUser | null): boolean {
+  return isAdmin(user) || isApprovedTeamMember(user)
+}
+
+export function canManageAllContent(user: PublicUser | null): boolean {
+  return isAdmin(user)
+}
+
+export async function registerUser(input: {
+  firstName: string
+  lastName: string
+  email: string
+  password: string
+  role: UserRole
+  institution?: string
+}): Promise<{ user: PublicUser } | { error: string }> {
+  const email = normalizeEmail(input.email)
+  if (!email) return { error: "Email is required." }
+  if (!input.password) return { error: "Password is required." }
+
+  const existing = await getBackendUserByEmail(email)
+  if (existing) return { error: "This email is already registered." }
+
+  const existingUsers = await fetchAllUsersFromBackend()
+  const role: UserRole = existingUsers.length === 0 ? "admin" : input.role
+  const status: AccountStatus = role === "team" ? "pending" : "active"
+
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/users`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email,
+        first_name: input.firstName.trim(),
+        last_name: input.lastName.trim(),
+        password: input.password,
+        role: mapFrontendRoleToBackendRole(role),
+        institution: input.institution?.trim() || null,
+        status,
+      }),
+    })
+
+    if (!response.ok) {
+      let message = "Failed to create user in backend database."
+      try {
+        const err = (await response.json()) as { detail?: string }
+        if (typeof err.detail === "string" && err.detail) {
+          message = err.detail
+        }
+      } catch {
+        // Keep default message when backend error body is not JSON.
+      }
+      return { error: message }
+    }
+
+    const backendUser = (await response.json()) as BackendUser
+    currentUser = fromBackendUser(backendUser)
+    notifyAuthChange()
+    return { user: currentUser }
+  } catch {
+    return { error: "Cannot reach backend API. Check backend container and NEXT_PUBLIC_API_URL." }
+  }
+}
+
+export async function loginUser(input: {
+  email: string
+  password: string
+}): Promise<{ user: PublicUser } | { error: string }> {
+  const email = normalizeEmail(input.email)
+
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email,
+        password: input.password,
+      }),
+    })
+
+    if (!response.ok) {
+      let message = "Invalid login credentials."
+      try {
+        const err = (await response.json()) as { detail?: string }
+        if (typeof err.detail === "string" && err.detail) {
+          message = err.detail
+        }
+      } catch {
+        // Keep default message when backend error body is not JSON.
+      }
+      return { error: message }
+    }
+
+    const backendUser = (await response.json()) as BackendUser
+    currentUser = fromBackendUser(backendUser)
+    notifyAuthChange()
+    return { user: currentUser }
+  } catch {
+    return { error: "Cannot reach backend API. Check backend container and NEXT_PUBLIC_API_URL." }
+  }
+}
+
+export function logoutUser() {
+  currentUser = null
+  notifyAuthChange()
+}
+
+export async function updateCurrentUserProfile(patch: {
+  firstName?: string
+  lastName?: string
+  institution?: string
+}): Promise<{ user: PublicUser } | { error: string }> {
+  if (!currentUser) return { error: "Not logged in." }
+
+  const response = await fetch(`${getApiBaseUrl()}/users/${currentUser.id}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      first_name: patch.firstName ?? currentUser.firstName,
+      last_name: patch.lastName ?? currentUser.lastName,
+      institution: patch.institution ?? currentUser.institution ?? null,
+    }),
+  })
+
+  if (!response.ok) {
+    let message = "Failed to update profile in backend database."
+    try {
+      const err = (await response.json()) as { detail?: string }
+      if (typeof err.detail === "string" && err.detail) {
+        message = err.detail
+      }
+    } catch {
+      // Keep default message when backend error body is not JSON.
+    }
+    return { error: message }
+  }
+
+  const backendUser = (await response.json()) as BackendUser
+  currentUser = fromBackendUser(backendUser)
+  notifyAuthChange()
+  return { user: currentUser }
+}
+
+export async function resetCurrentUserPassword(input: {
+  confirmEmail: string
+  newPassword: string
+}): Promise<{ ok: true } | { error: string }> {
+  if (!currentUser) return { error: "Not logged in." }
+
+  const confirmEmail = normalizeEmail(input.confirmEmail)
+  if (confirmEmail !== normalizeEmail(currentUser.email)) {
+    return { error: "Email confirmation does not match your account." }
+  }
+  if (!input.newPassword) return { error: "New password is required." }
+
+  const response = await fetch(`${getApiBaseUrl()}/users/${currentUser.id}/password`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ password: input.newPassword }),
+  })
+
+  if (!response.ok) {
+    let message = "Failed to update password in backend database."
+    try {
+      const err = (await response.json()) as { detail?: string }
+      if (typeof err.detail === "string" && err.detail) {
+        message = err.detail
+      }
+    } catch {
+      // Keep default message when backend error body is not JSON.
+    }
+    return { error: message }
+  }
+
+  const backendUser = (await response.json()) as BackendUser
+  currentUser = fromBackendUser(backendUser)
+  notifyAuthChange()
+  return { ok: true }
+}
+
+export async function deleteCurrentUser(): Promise<{ ok: true } | { error: string }> {
+  if (!currentUser) return { error: "Not logged in." }
+
+  const response = await fetch(`${getApiBaseUrl()}/users/${currentUser.id}`, {
+    method: "DELETE",
+  })
+
+  if (!response.ok) {
+    let message = "Failed to delete account from backend database."
+    try {
+      const err = (await response.json()) as { detail?: string }
+      if (typeof err.detail === "string" && err.detail) {
+        message = err.detail
+      }
+    } catch {
+      // Keep default message when backend error body is not JSON.
+    }
+    return { error: message }
+  }
+
+  currentUser = null
+  notifyAuthChange()
+  return { ok: true }
+}
+export const AUTH_STORAGE_EVENT = "lamacop-auth"
+
+export type UserRole = "admin" | "team" | "user"
+export type AccountStatus = "active" | "pending"
+
+export type PublicUser = {
+  id: string
+  firstName: string
+  lastName: string
+  email: string
+  role: UserRole
+  status: AccountStatus
+  institution?: string
+  createdAt: string
+  updatedAt: string
+}
+
+type BackendUser = {
+  id: number
+  email: string
+  first_name: string | null
+  last_name: string | null
+  institution: string | null
+  role: UserRole
+  status: AccountStatus
+  created_at: string
+  updated_at: string
+}
+
+declare const process: {
+  env: {
+    NEXT_PUBLIC_API_URL?: string
+  }
+}
+
+let currentUser: PublicUser | null = null
+
+function notifyAuthChange() {
+  if (typeof window === "undefined") return
+  window.dispatchEvent(new Event(AUTH_STORAGE_EVENT))
+}
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase()
 }
 
 function getApiBaseUrl() {
   return (process.env.NEXT_PUBLIC_API_URL || "/api/v1").replace(/\/$/, "")
 }
 
-function mapFrontendRoleToBackendRole(role: UserRole): "student" | "researcher" | "admin" {
+function mapFrontendRoleToBackendRole(role: UserRole): UserRole {
   if (role === "admin") return "admin"
-  if (role === "team") return "researcher"
-  return "student"
+  if (role === "team") return "team"
+  return "user"
+}
+
+async function getBackendUserByEmail(email: string): Promise<BackendUser | null> {
+  const response = await fetch(`${getApiBaseUrl()}/users/by-email/${encodeURIComponent(email)}`)
+  if (response.status === 404) return null
+  if (!response.ok) return null
+  return (await response.json()) as BackendUser
+}
+
+function fromBackendUser(user: BackendUser): PublicUser {
+  return {
+    id: String(user.id),
+    firstName: user.first_name ?? "",
+    lastName: user.last_name ?? "",
+    email: user.email,
+    role: user.role,
+    status: user.status,
+    institution: user.institution ?? undefined,
+    createdAt: user.created_at,
+    updatedAt: user.updated_at,
+  }
 }
 
 export function getCurrentUser(): PublicUser | null {
-  const session = readSession()
-  if (!session?.email) return null
-
-  const users = readUsers()
-  const user = users.find((u) => normalizeEmail(u.email) === normalizeEmail(session.email))
-  return user ? toPublicUser(user) : null
+  return currentUser
 }
 
-export function getAllUsers(): PublicUser[] {
-  return readUsers().map(toPublicUser)
+async function fetchAllUsersFromBackend(): Promise<PublicUser[]> {
+  const pageSize = 100
+  const users: PublicUser[] = []
+  let skip = 0
+
+  while (true) {
+    const response = await fetch(`${getApiBaseUrl()}/users?skip=${skip}&limit=${pageSize}`)
+    if (!response.ok) {
+      throw new Error("Failed to load users from backend.")
+    }
+
+    const batch = (await response.json()) as BackendUser[]
+    users.push(...batch.map(fromBackendUser))
+    if (batch.length < pageSize) break
+    skip += pageSize
+  }
+
+  return users
 }
 
-export function getPendingTeamUsers(): PublicUser[] {
-  return readUsers()
+export async function getAllUsers(): Promise<PublicUser[]> {
+  return fetchAllUsersFromBackend()
+}
+
+export async function getPendingTeamUsers(): Promise<PublicUser[]> {
+  const users = await fetchAllUsersFromBackend()
+  return users
     .filter((u) => u.role === "team" && u.status === "pending")
-    .map(toPublicUser)
 }
 
-export function approveTeamUser(userId: string): { ok: true } | { error: string } {
-  if (!isBrowser()) return { error: "Approval is only available in the browser." }
-
-  const users = readUsers()
-  const idx = users.findIndex((u) => u.id === userId)
-  if (idx === -1) return { error: "User not found." }
-  if (users[idx].role !== "team") return { error: "Only team members require approval." }
-
-  users[idx] = { ...users[idx], status: "active" }
-  writeUsers(users)
-
-  const approvedUser = users[idx]
-  const fullName = [approvedUser.firstName, approvedUser.lastName]
-    .filter(Boolean)
-    .join(" ")
-    .trim() || approvedUser.email
-  const position = approvedUser.institution?.trim() || "Research Team"
-
-  upsertTeamMemberByEmail({
-    name: fullName,
-    position,
-    email: approvedUser.email,
+export async function approveTeamUser(userId: string): Promise<{ ok: true } | { error: string }> {
+  const response = await fetch(`${getApiBaseUrl()}/users/${userId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ status: "active" }),
   })
 
+  if (!response.ok) {
+    let message = "Approval failed."
+    try {
+      const err = (await response.json()) as { detail?: string }
+      if (typeof err.detail === "string" && err.detail) {
+        message = err.detail
+      }
+    } catch {
+      // Keep default message when backend error body is not JSON.
+    }
+    return { error: message }
+  }
+
+  if (currentUser && currentUser.id === userId) {
+    currentUser = { ...currentUser, status: "active", updatedAt: new Date().toISOString() }
+  }
   notifyAuthChange()
   return { ok: true }
 }
 
-export function rejectUser(userId: string): { ok: true } | { error: string } {
-  if (!isBrowser()) return { error: "Rejection is only available in the browser." }
+export async function rejectUser(userId: string): Promise<{ ok: true } | { error: string }> {
+  const response = await fetch(`${getApiBaseUrl()}/users/${userId}`, {
+    method: "DELETE",
+  })
 
-  const users = readUsers()
-  const next = users.filter((u) => u.id !== userId)
-  if (next.length === users.length) return { error: "User not found." }
+  if (!response.ok) {
+    let message = "Rejection failed."
+    try {
+      const err = (await response.json()) as { detail?: string }
+      if (typeof err.detail === "string" && err.detail) {
+        message = err.detail
+      }
+    } catch {
+      // Keep default message when backend error body is not JSON.
+    }
+    return { error: message }
+  }
 
-  writeUsers(next)
+  if (currentUser && currentUser.id === userId) {
+    currentUser = null
+  }
   notifyAuthChange()
   return { ok: true }
 }
@@ -215,22 +598,17 @@ export async function registerUser(input: {
   role: UserRole
   institution?: string
 }): Promise<{ user: PublicUser } | { error: string }> {
-  if (!isBrowser()) return { error: "Registration is only available in the browser." }
-
   const email = normalizeEmail(input.email)
   if (!email) return { error: "Email is required." }
   if (!input.password) return { error: "Password is required." }
 
-  const users = readUsers()
-  const existing = users.find((u) => normalizeEmail(u.email) === email)
+  const existing = await getBackendUserByEmail(email)
   if (existing) return { error: "This email is already registered." }
 
-  const isFirstAccount = users.length === 0
-  const role: UserRole = isFirstAccount ? "admin" : input.role
+  const existingUsers = await fetchAllUsersFromBackend()
+  const role: UserRole = existingUsers.length === 0 ? "admin" : input.role
   const status: AccountStatus =
-    role === "team" && !isFirstAccount ? "pending" : "active"
-
-  const fullName = `${input.firstName} ${input.lastName}`.trim()
+    role === "team" ? "pending" : "active"
   const backendRole = mapFrontendRoleToBackendRole(role)
 
   try {
@@ -241,10 +619,12 @@ export async function registerUser(input: {
       },
       body: JSON.stringify({
         email,
-        name: fullName,
+        first_name: input.firstName.trim(),
+        last_name: input.lastName.trim(),
         password: input.password,
         role: backendRole,
-        bio: input.institution?.trim() || null,
+        institution: input.institution?.trim() || null,
+        status,
       }),
     })
 
@@ -256,122 +636,159 @@ export async function registerUser(input: {
           message = err.detail
           
         }
+      currentUser = fromBackendUser(backendUser)
+      institution: input.institution?.trim() || undefined,
+
+      return { user: currentUser }
+    }
+
+    writeUsers([newUser, ...users])
+    writeSession({ email, createdAt: new Date().toISOString() })
+    notifyAuthChange()
+  export async function loginUser(input: {
+    return { user: toPublicUser(newUser) }
+  } catch {
+  }): Promise<{ user: PublicUser } | { error: string }> {
+}
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          password: input.password,
+        }),
+      })
+
+      if (!response.ok) {
+        let message = "Invalid login credentials."
+        try {
+          const err = (await response.json()) as { detail?: string }
+          if (typeof err.detail === "string" && err.detail) {
+            message = err.detail
+          }
+        } catch {
+          // Keep default message when backend error body is not JSON.
+        }
+        return { error: message }
+      }
+
+      const backendUser = (await response.json()) as BackendUser
+      currentUser = fromBackendUser(backendUser)
+      notifyAuthChange()
+      return { user: currentUser }
+    } catch {
+      return { error: "Cannot reach backend API. Check backend container and NEXT_PUBLIC_API_URL." }
+    }
+  }
+
+  export function logoutUser() {
+    currentUser = null
+    notifyAuthChange()
+  }
+
+  export async function updateCurrentUserProfile(patch: {
+    firstName?: string
+    lastName?: string
+    institution?: string
+  }): Promise<{ user: PublicUser } | { error: string }> {
+    if (!currentUser) return { error: "Not logged in." }
+
+    const response = await fetch(`${getApiBaseUrl()}/users/${currentUser.id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        first_name: patch.firstName ?? currentUser.firstName,
+        last_name: patch.lastName ?? currentUser.lastName,
+        institution: patch.institution ?? currentUser.institution ?? null,
+      }),
+    })
+
+    if (!response.ok) {
+      let message = "Failed to update profile in backend database."
+      try {
+        const err = (await response.json()) as { detail?: string }
+        if (typeof err.detail === "string" && err.detail) {
+          message = err.detail
+        }
       } catch {
         // Keep default message when backend error body is not JSON.
       }
       return { error: message }
     }
-  } catch {
-    return { error: "Cannot reach backend API. Check backend container and NEXT_PUBLIC_API_URL." }
+
+    const backendUser = (await response.json()) as BackendUser
+    currentUser = fromBackendUser(backendUser)
+    notifyAuthChange()
+    return { user: currentUser }
   }
 
-  const newUser: StoredUser = {
-    id: createId(),
-    firstName: input.firstName.trim(),
-    lastName: input.lastName.trim(),
-    email,
-    password: input.password,
-    role,
-    status,
-    institution: input.institution?.trim() || undefined,
-    createdAt: new Date().toISOString(),
+  export async function resetCurrentUserPassword(input: {
+    confirmEmail: string
+    newPassword: string
+  }): Promise<{ ok: true } | { error: string }> {
+    if (!currentUser) return { error: "Not logged in." }
+
+    const confirmEmail = normalizeEmail(input.confirmEmail)
+    if (confirmEmail !== normalizeEmail(currentUser.email)) {
+      return { error: "Email confirmation does not match your account." }
+    }
+    if (!input.newPassword) return { error: "New password is required." }
+
+    const response = await fetch(`${getApiBaseUrl()}/users/${currentUser.id}/password`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ password: input.newPassword }),
+    })
+
+    if (!response.ok) {
+      let message = "Failed to update password in backend database."
+      try {
+        const err = (await response.json()) as { detail?: string }
+        if (typeof err.detail === "string" && err.detail) {
+          message = err.detail
+        }
+      } catch {
+        // Keep default message when backend error body is not JSON.
+      }
+      return { error: message }
+    }
+
+    const backendUser = (await response.json()) as BackendUser
+    currentUser = fromBackendUser(backendUser)
+    notifyAuthChange()
+    return { ok: true }
   }
 
-  writeUsers([newUser, ...users])
-  writeSession({ email, createdAt: new Date().toISOString() })
-  notifyAuthChange()
+  export async function deleteCurrentUser(): Promise<{ ok: true } | { error: string }> {
+    if (!currentUser) return { error: "Not logged in." }
 
-  return { user: toPublicUser(newUser) }
-}
+    const response = await fetch(`${getApiBaseUrl()}/users/${currentUser.id}`, {
+      method: "DELETE",
+    })
 
-export function loginUser(input: {
-  email: string
-  password: string
-}): { user: PublicUser } | { error: string } {
-  if (!isBrowser()) return { error: "Login is only available in the browser." }
+    if (!response.ok) {
+      let message = "Failed to delete account from backend database."
+      try {
+        const err = (await response.json()) as { detail?: string }
+        if (typeof err.detail === "string" && err.detail) {
+          message = err.detail
+        }
+      } catch {
+        // Keep default message when backend error body is not JSON.
+      }
+      return { error: message }
+    }
 
-  const email = normalizeEmail(input.email)
-  const password = input.password
-
-  const users = readUsers()
-  const user = users.find((u) => normalizeEmail(u.email) === email)
-  if (!user) return { error: "Account not found. Please sign up first." }
-  if (user.password !== password) return { error: "Invalid password." }
-
-  writeSession({ email, createdAt: new Date().toISOString() })
-  notifyAuthChange()
-
-  return { user: toPublicUser(user) }
-}
-
-export function logoutUser() {
-  clearSession()
-  notifyAuthChange()
-}
-
-export function updateCurrentUserProfile(patch: {
-  firstName?: string
-  lastName?: string
-  institution?: string
-}): { user: PublicUser } | { error: string } {
-  if (!isBrowser()) return { error: "Profile updates are only available in the browser." }
-
-  const session = readSession()
-  if (!session?.email) return { error: "Not logged in." }
-
-  const users = readUsers()
-  const idx = users.findIndex(
-    (u) => normalizeEmail(u.email) === normalizeEmail(session.email)
-  )
-  if (idx === -1) return { error: "User not found." }
-
-  users[idx] = {
-    ...users[idx],
-    firstName: (patch.firstName ?? users[idx].firstName).trim(),
-    lastName: (patch.lastName ?? users[idx].lastName).trim(),
-    institution:
-      (patch.institution ?? users[idx].institution ?? "").trim() || undefined,
-  }
-  writeUsers(users)
-  notifyAuthChange()
-  return { user: toPublicUser(users[idx]) }
-}
-
-export function resetCurrentUserPassword(input: {
-  confirmEmail: string
-  newPassword: string
-}): { ok: true } | { error: string } {
-  if (!isBrowser()) return { error: "Password reset is only available in the browser." }
-
-  const session = readSession()
-  if (!session?.email) return { error: "Not logged in." }
-
-  const confirmEmail = normalizeEmail(input.confirmEmail)
-  if (confirmEmail !== normalizeEmail(session.email)) {
-    return { error: "Email confirmation does not match your account." }
-  }
-  if (!input.newPassword) return { error: "New password is required." }
-
-  const users = readUsers()
-  const idx = users.findIndex(
-    (u) => normalizeEmail(u.email) === normalizeEmail(session.email)
-  )
-  if (idx === -1) return { error: "User not found." }
-
-  users[idx] = { ...users[idx], password: input.newPassword }
-  writeUsers(users)
-  notifyAuthChange()
-  return { ok: true }
-}
-
-export function deleteCurrentUser(): { ok: true } | { error: string } {
-  if (!isBrowser()) return { error: "Account deletion is only available in the browser." }
-
-  const session = readSession()
-  if (!session?.email) return { error: "Not logged in." }
-
-  const users = readUsers()
-  const next = users.filter(
+    currentUser = null
+    notifyAuthChange()
+    return { ok: true }
     (u) => normalizeEmail(u.email) !== normalizeEmail(session.email)
   )
   if (next.length === users.length) return { error: "User not found." }

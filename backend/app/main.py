@@ -59,6 +59,26 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
     return user
 
 
+@app.get(f"{settings.api_prefix}/users/by-email/{{email}}", response_model=schemas.User)
+def get_user_by_email(email: str, db: Session = Depends(get_db)):
+    """Get user by email"""
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+@app.post(f"{settings.api_prefix}/auth/login", response_model=schemas.User)
+def login_user(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
+    """Authenticate a user against the database"""
+    user = db.query(User).filter(User.email == payload.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.password_hash != payload.password:
+        raise HTTPException(status_code=401, detail="Invalid password")
+    return user
+
+
 @app.post(f"{settings.api_prefix}/users", response_model=schemas.User)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     """Create new user"""
@@ -68,11 +88,12 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     
     new_user = User(
         email=user.email,
-        name=user.name,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        institution=user.institution,
         password_hash=hash_password(user.password),
         role=user.role,
-        bio=user.bio,
-        image_url=user.image_url
+        status=user.status
     )
     db.add(new_user)
     db.commit()
@@ -81,31 +102,6 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
 
 
 @app.post(f"{settings.api_prefix}/auth/login", response_model=schemas.LoginResponse)
-def login_user(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
-    """Authenticate user with email/password and return profile."""
-    user = db.query(User).filter(User.email == payload.email).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-
-    password_ok = False
-    try:
-        password_ok = verify_password(payload.password, user.password_hash)
-    except Exception:
-        # Backward compatibility for old rows that were stored in plain text.
-        password_ok = payload.password == user.password_hash
-        if password_ok:
-            user.password_hash = hash_password(payload.password)
-            db.commit()
-
-    if not password_ok:
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-
-    return schemas.LoginResponse(
-        id=user.id,
-        email=user.email,
-        name=user.name,
-        role=user.role,
-    )
 
 
 @app.put(f"{settings.api_prefix}/users/{{user_id}}", response_model=schemas.User)
@@ -115,13 +111,34 @@ def update_user(user_id: int, user: schemas.UserUpdate, db: Session = Depends(ge
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    if user.name:
-        db_user.name = user.name
-    if user.bio is not None:
-        db_user.bio = user.bio
-    if user.image_url:
-        db_user.image_url = user.image_url
+    if user.first_name is not None:
+        db_user.first_name = user.first_name
+    if user.last_name is not None:
+        db_user.last_name = user.last_name
+    if user.institution is not None:
+        db_user.institution = user.institution
+    if user.role is not None:
+        db_user.role = user.role
+    if user.status is not None:
+        db_user.status = user.status
     
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+
+@app.put(f"{settings.api_prefix}/users/{{user_id}}/password", response_model=schemas.User)
+def update_user_password(
+    user_id: int,
+    payload: schemas.UserPasswordUpdate,
+    db: Session = Depends(get_db),
+):
+    """Update user password"""
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    db_user.password_hash = payload.password
     db.commit()
     db.refresh(db_user)
     return db_user
@@ -133,6 +150,12 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.id == user_id).first()
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    db.query(ResearchProject).filter(ResearchProject.created_by == user_id).delete(synchronize_session=False)
+    db.query(TeamMember).filter(TeamMember.created_by == user_id).delete(synchronize_session=False)
+    db.query(Publication).filter(Publication.created_by == user_id).delete(synchronize_session=False)
+    db.query(EquipmentItem).filter(EquipmentItem.created_by == user_id).delete(synchronize_session=False)
+    db.query(NewsItem).filter(NewsItem.created_by == user_id).delete(synchronize_session=False)
     
     db.delete(db_user)
     db.commit()

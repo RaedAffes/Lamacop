@@ -23,10 +23,9 @@ def init_db():
 
 # Enums
 class UserRole(str, PyEnum):
-    student = "student"
-    researcher = "researcher"
-    professor = "professor"
     admin = "admin"
+    team = "team"
+    user = "user"
 
 
 class ItemStatus(str, PyEnum):
@@ -48,11 +47,12 @@ class User(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, nullable=False, index=True)
-    name = Column(String(255), nullable=False)
     password_hash = Column(String(255), nullable=False)
-    role = Column(Enum(UserRole), nullable=False, default=UserRole.student)
-    bio = Column(Text, nullable=True)
-    image_url = Column(String(255), nullable=True)
+    first_name = Column(String(100), nullable=True)
+    last_name = Column(String(100), nullable=True)
+    institution = Column(String(255), nullable=True)
+    role = Column(Enum(UserRole), nullable=False, default=UserRole.user)
+    status = Column(String(20), nullable=False, default="active")
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 

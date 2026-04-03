@@ -9,6 +9,8 @@ services:
     restart: unless-stopped
     env_file:
       - ./backend/.env
+    environment:
+      FRONTEND_URL: ${FRONTEND_URL:-http://20.111.60.184}
     ports:
       - "8000:8000"
     extra_hosts:
@@ -25,11 +27,11 @@ services:
       dockerfile: Dockerfile
 
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://20.111.60.184:8000/api/v1}
     container_name: lamacop-frontend
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "20.111.60.184:80:80"
     depends_on:
       - backend
     networks:

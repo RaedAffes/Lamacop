@@ -22,12 +22,12 @@ export default function LoginPage() {
           <div className="mx-auto max-w-md rounded-xl border border-slate-200 bg-white p-6">
             <form
               className="space-y-4"
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault()
                 setError(null)
                 setSubmitting(true)
 
-                const result = loginUser({ email, password })
+                const result = await loginUser({ email, password })
                 if ("error" in result) {
                   setError(result.error)
                   setSubmitting(false)

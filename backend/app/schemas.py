@@ -5,10 +5,14 @@ from enum import Enum
 
 
 class UserRole(str, Enum):
-    student = "student"
-    researcher = "researcher"
-    professor = "professor"
     admin = "admin"
+    team = "team"
+    user = "user"
+
+
+class AccountStatus(str, Enum):
+    active = "active"
+    pending = "pending"
 
 
 class ItemStatus(str, Enum):
@@ -24,23 +28,34 @@ class NewsCategory(str, Enum):
     achievement = "achievement"
 
 
-# User Schemas
 class UserBase(BaseModel):
     email: EmailStr
-    name: str
-    role: UserRole = UserRole.student
-    bio: Optional[str] = None
-    image_url: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    institution: Optional[str] = None
+    role: UserRole = UserRole.user
+    status: AccountStatus = AccountStatus.active
 
 
 class UserCreate(UserBase):
     password: str
 
 
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
 class UserUpdate(BaseModel):
-    name: Optional[str] = None
-    bio: Optional[str] = None
-    image_url: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    institution: Optional[str] = None
+    role: Optional[UserRole] = None
+    status: Optional[AccountStatus] = None
+
+
+class UserPasswordUpdate(BaseModel):
+    password: str
 
 
 class User(UserBase):
@@ -50,18 +65,6 @@ class User(UserBase):
 
     class Config:
         from_attributes = True
-
-
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class LoginResponse(BaseModel):
-    id: int
-    email: EmailStr
-    name: str
-    role: UserRole
 
 
 # Research Project Schemas

@@ -28,8 +28,8 @@ export default function AdminPage() {
   }, [me])
 
   const refresh = () => {
-    setPending(getPendingTeamUsers())
-    setUsers(getAllUsers())
+    void getPendingTeamUsers().then(setPending)
+    void getAllUsers().then(setUsers)
   }
 
   useEffect(() => {
@@ -115,7 +115,7 @@ export default function AdminPage() {
                         type="button"
                         onClick={() => {
                           setError(null)
-                          const res = approveTeamUser(u.id)
+                          const res = await approveTeamUser(u.id)
                           if ("error" in res) {
                             setError(res.error)
                             return
@@ -130,7 +130,7 @@ export default function AdminPage() {
                         type="button"
                         onClick={() => {
                           setError(null)
-                          const res = rejectUser(u.id)
+                          const res = await rejectUser(u.id)
                           if ("error" in res) {
                             setError(res.error)
                             return
@@ -169,6 +169,7 @@ export default function AdminPage() {
                   <div className="text-right text-xs text-slate-500">
                     <div>role: {u.role}</div>
                     <div>status: {u.status}</div>
+                    <div>updated: {new Date(u.updatedAt).toLocaleString()}</div>
                   </div>
                 </div>
               ))}

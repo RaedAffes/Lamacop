@@ -32,7 +32,7 @@ class Settings(BaseSettings):
         extra = "allow"
 
     @property
-    def database_url(self):
+    def database_url(self) -> URL | str:
         """Get database URL from DATABASE_URL or compose it from DB_* variables."""
         if self.database_url_raw:
             return self.database_url_raw

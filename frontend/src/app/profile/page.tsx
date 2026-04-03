@@ -39,7 +39,7 @@ export default function ProfilePage() {
     setInstitution(current?.institution ?? "")
 
     if (isAdmin(current)) {
-      setPending(getPendingTeamUsers())
+      void getPendingTeamUsers().then(setPending)
     }
   }, [])
 
@@ -88,6 +88,9 @@ export default function ProfilePage() {
               </div>
               <div>
                 <span className="font-semibold text-slate-900">Member since:</span> {new Date(user.createdAt).toLocaleDateString()}
+              </div>
+              <div>
+                <span className="font-semibold text-slate-900">Last updated:</span> {new Date(user.updatedAt).toLocaleString()}
               </div>
             </div>
 
@@ -266,10 +269,10 @@ export default function ProfilePage() {
 
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   setError(null)
                   setSuccess(null)
-                  const res = resetCurrentUserPassword({
+                  const res = await resetCurrentUserPassword({
                     confirmEmail,
                     newPassword,
                   })
@@ -297,13 +300,13 @@ export default function ProfilePage() {
 
             <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
                 setError(null)
                 setSuccess(null)
                 const ok = window.confirm("Delete your account? This cannot be undone.")
                 if (!ok) return
 
-                const res = deleteCurrentUser()
+                const res = await deleteCurrentUser()
                 if ("error" in res) {
                   setError(res.error)
                   return
