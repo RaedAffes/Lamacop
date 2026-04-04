@@ -113,7 +113,7 @@ export default function AdminPage() {
                     <div className="flex shrink-0 gap-2">
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={async () => {
                           setError(null)
                           const res = await approveTeamUser(u.id)
                           if ("error" in res) {
@@ -128,7 +128,7 @@ export default function AdminPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={async () => {
                           setError(null)
                           const res = await rejectUser(u.id)
                           if ("error" in res) {
