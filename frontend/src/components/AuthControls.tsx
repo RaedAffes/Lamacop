@@ -19,19 +19,29 @@ export default function AuthControls() {
   const [pendingCount, setPendingCount] = useState(0)
 
   useEffect(() => {
-    const sync = () => {
+    const sync = async () => {
       const current = getCurrentUser()
       setUser(current)
-      setPendingCount(isAdmin(current) ? getPendingTeamUsers().length : 0)
+      if (!isAdmin(current)) {
+        setPendingCount(0)
+        return
+      }
+
+      const pending = await getPendingTeamUsers()
+      setPendingCount(pending.length)
     }
 
-    sync()
-    window.addEventListener(AUTH_STORAGE_EVENT, sync)
-    window.addEventListener("storage", sync)
+    const handleSync = () => {
+      void sync()
+    }
+
+    handleSync()
+    window.addEventListener(AUTH_STORAGE_EVENT, handleSync)
+    window.addEventListener("storage", handleSync)
 
     return () => {
-      window.removeEventListener(AUTH_STORAGE_EVENT, sync)
-      window.removeEventListener("storage", sync)
+      window.removeEventListener(AUTH_STORAGE_EVENT, handleSync)
+      window.removeEventListener("storage", handleSync)
     }
   }, [])
 

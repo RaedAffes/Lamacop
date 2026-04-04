@@ -144,15 +144,15 @@ export default function ProfilePage() {
                       <div className="flex shrink-0 gap-2">
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={async () => {
                             setError(null)
                             setSuccess(null)
-                            const res = approveTeamUser(u.id)
+                            const res = await approveTeamUser(u.id)
                             if ("error" in res) {
                               setError(res.error)
                               return
                             }
-                            setPending(getPendingTeamUsers())
+                            setPending(await getPendingTeamUsers())
                             setSuccess("Approved.")
                           }}
                           className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
@@ -161,15 +161,15 @@ export default function ProfilePage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={async () => {
                             setError(null)
                             setSuccess(null)
-                            const res = rejectUser(u.id)
+                            const res = await rejectUser(u.id)
                             if ("error" in res) {
                               setError(res.error)
                               return
                             }
-                            setPending(getPendingTeamUsers())
+                            setPending(await getPendingTeamUsers())
                             setSuccess("Rejected.")
                           }}
                           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
@@ -218,10 +218,10 @@ export default function ProfilePage() {
 
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   setError(null)
                   setSuccess(null)
-                  const res = updateCurrentUserProfile({
+                  const res = await updateCurrentUserProfile({
                     firstName,
                     lastName,
                     institution,
