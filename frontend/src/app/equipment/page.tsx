@@ -342,9 +342,9 @@ export default function EquipmentPage() {
                         Equipment
                       </div>
                       <div className="mx-auto h-44 w-full max-w-sm overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-sm">
-                        {eq.image?.dataUrl ? (
+                        {eq.image?.url || eq.image?.dataUrl ? (
                           <img
-                            src={eq.image.dataUrl}
+                            src={eq.image.url ?? eq.image.dataUrl}
                             alt={eq.image.name || eq.name}
                             className="h-full w-full object-cover"
                           />

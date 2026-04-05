@@ -287,9 +287,9 @@ export default function ResearchPage() {
                         Research
                       </div>
                       <div className="mx-auto h-44 w-full max-w-sm overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-sm">
-                        {p.image?.dataUrl ? (
+                        {p.image?.url || p.image?.dataUrl ? (
                           <img
-                            src={p.image.dataUrl}
+                            src={p.image.url ?? p.image.dataUrl}
                             alt={p.image.name || p.title}
                             className="h-full w-full object-cover"
                           />

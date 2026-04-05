@@ -252,6 +252,10 @@ export async function loginUser(input: {
 }): Promise<{ user: PublicUser } | { error: string }> {
   const email = normalizeEmail(input.email)
 
+  // Clear stale in-memory session before switching accounts.
+  currentUser = null
+  notifyAuthChange()
+
   try {
     const response = await fetch(`${getApiBaseUrl()}/auth/login`, {
       method: "POST",
@@ -277,6 +281,10 @@ export async function loginUser(input: {
     }
 
     const backendUser = (await response.json()) as BackendUser
+    if (normalizeEmail(backendUser.email) !== email) {
+      return { error: "Login session mismatch. Please try again." }
+    }
+
     currentUser = fromBackendUser(backendUser)
     notifyAuthChange()
     return { user: currentUser }

@@ -490,9 +490,9 @@ export default function PublicationsPage() {
                         {pub.type}
                       </div>
                       <div className="mx-auto h-44 w-full max-w-sm overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-sm">
-                        {pub.image?.dataUrl ? (
+                        {pub.image?.url || pub.image?.dataUrl ? (
                           <img
-                            src={pub.image.dataUrl}
+                            src={pub.image.url ?? pub.image.dataUrl}
                             alt={pub.image.name || pub.title}
                             className="h-full w-full object-cover"
                           />
@@ -529,7 +529,7 @@ export default function PublicationsPage() {
                         {pub.attachment && (
                           <a
                             className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700"
-                            href={pub.attachment.dataUrl}
+                            href={pub.attachment.url ?? pub.attachment.dataUrl}
                             download={pub.attachment.name}
                           >
                             Download PDF

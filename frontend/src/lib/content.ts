@@ -34,8 +34,13 @@ function writeList<T>(key: string, list: T[]) {
 export type StoredMedia = {
   name: string
   type: string
-  dataUrl: string
   size: number
+  url?: string
+  dataUrl?: string
+}
+
+export function getStoredMediaUrl(media?: StoredMedia | null): string | undefined {
+  return media?.url ?? media?.dataUrl
 }
 
 export type ResearchProject = {

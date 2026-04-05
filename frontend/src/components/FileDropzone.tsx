@@ -5,8 +5,19 @@ import { useCallback, useMemo, useRef, useState } from "react"
 type StoredFile = {
   name: string
   type: string
-  dataUrl: string
   size: number
+  url?: string
+  dataUrl?: string
+}
+
+declare const process: {
+  env: {
+    NEXT_PUBLIC_API_URL?: string
+  }
+}
+
+function getApiBaseUrl() {
+  return (process.env.NEXT_PUBLIC_API_URL || "/api/v1").replace(/\/$/, "")
 }
 
 export default function FileDropzone({
@@ -16,6 +27,7 @@ export default function FileDropzone({
   maxSizeBytes = 1024 * 1024,
   value,
   onChange,
+  uploadFolder = "uploads",
 }: {
   label: string
   helpText?: string
@@ -23,10 +35,12 @@ export default function FileDropzone({
   maxSizeBytes?: number
   value: StoredFile | null
   onChange: (file: StoredFile | null) => void
+  uploadFolder?: string
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
 
   const isImage = useMemo(() => {
     return !!value?.type?.startsWith("image/")
@@ -42,21 +56,35 @@ export default function FileDropzone({
         return
       }
 
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(String(reader.result))
-        reader.onerror = () => reject(new Error("Failed to read file"))
-        reader.readAsDataURL(file)
-      })
+      setUploading(true)
+      try {
+        const formData = new FormData()
+        formData.append("file", file)
+        formData.append("folder", uploadFolder)
 
-      onChange({
-        name: file.name,
-        type: file.type || "application/octet-stream",
-        size: file.size,
-        dataUrl,
-      })
+        const response = await fetch(`${getApiBaseUrl()}/uploads`, {
+          method: "POST",
+          body: formData,
+        })
+
+        if (!response.ok) {
+          throw new Error("Upload failed")
+        }
+
+        const payload = (await response.json()) as { url: string; blob_name: string }
+        onChange({
+          name: file.name,
+          type: file.type || "application/octet-stream",
+          size: file.size,
+          url: `${getApiBaseUrl()}/uploads/${encodeURIComponent(payload.blob_name)}`,
+        })
+      } catch {
+        setError("Upload failed. Check Azure Blob Storage configuration and backend availability.")
+      } finally {
+        setUploading(false)
+      }
     },
-    [maxSizeBytes, onChange]
+    [maxSizeBytes, onChange, uploadFolder]
   )
 
   const handleFiles = useCallback(
@@ -103,7 +131,7 @@ export default function FileDropzone({
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-sm font-semibold text-slate-900">
-              {value ? value.name : "Drop a file here"}
+              {value ? value.name : uploading ? "Uploading..." : "Drop a file here"}
             </div>
             <div className="mt-1 text-xs text-slate-500">
               {value
@@ -116,7 +144,8 @@ export default function FileDropzone({
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+              disabled={uploading}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Upload
             </button>
@@ -124,7 +153,8 @@ export default function FileDropzone({
               <button
                 type="button"
                 onClick={() => onChange(null)}
-                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
+                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={uploading}
               >
                 Remove
               </button>
@@ -132,18 +162,18 @@ export default function FileDropzone({
           </div>
         </div>
 
-        {value && isImage && (
+        {value && isImage && (value.url || value.dataUrl) && (
           <img
-            src={value.dataUrl}
+            src={value.url ?? value.dataUrl}
             alt={value.name}
             className="mt-4 h-32 w-32 rounded-lg border border-slate-200 object-cover"
           />
         )}
 
-        {value && !isImage && (
+        {value && !isImage && (value.url || value.dataUrl) && (
           <a
             className="mt-4 inline-block text-sm font-semibold text-slate-600 underline underline-offset-4 hover:text-slate-900"
-            href={value.dataUrl}
+            href={value.url ?? value.dataUrl}
             download={value.name}
           >
             Download

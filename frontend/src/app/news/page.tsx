@@ -293,9 +293,9 @@ export default function NewsPage() {
                         {n.category}
                       </div>
                       <div className="mx-auto h-44 w-full max-w-sm overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-sm">
-                        {n.image?.dataUrl ? (
+                        {n.image?.url || n.image?.dataUrl ? (
                           <img
-                            src={n.image.dataUrl}
+                            src={n.image.url ?? n.image.dataUrl}
                             alt={n.image.name || n.title}
                             className="h-full w-full object-cover"
                           />

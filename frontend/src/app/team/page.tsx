@@ -284,9 +284,9 @@ export default function TeamPage() {
                   ) : (
                     <div className="relative rounded-3xl border border-slate-200 bg-white px-6 py-8 text-center shadow-sm">
                       <div className="mx-auto flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border-4 border-white bg-brand-500 text-xl font-semibold text-white shadow-md">
-                        {m.photo?.dataUrl ? (
+                        {m.photo?.url || m.photo?.dataUrl ? (
                           <img
-                            src={m.photo.dataUrl}
+                            src={m.photo.url ?? m.photo.dataUrl}
                             alt={m.photo.name || m.name}
                             className="h-full w-full object-cover"
                           />

@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     
     # CORS
     frontend_url: str = "http://localhost:3000"
+
+    # Azure Blob Storage
+    azure_storage_connection_string: str | None = Field(default=None, alias="AZURE_STORAGE_CONNECTION_STRING")
+    azure_storage_account_name: str | None = Field(default=None, alias="AZURE_STORAGE_ACCOUNT_NAME")
+    azure_storage_account_key: str | None = Field(default=None, alias="AZURE_STORAGE_ACCOUNT_KEY")
+    azure_storage_container_name: str = Field(default="lamacop-media", alias="AZURE_STORAGE_CONTAINER_NAME")
     
     class Config:
         case_sensitive = False

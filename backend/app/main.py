@@ -1,7 +1,11 @@
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List
+from uuid import uuid4
+from urllib.parse import quote
+import re
 from app.config import get_settings
 from app.database import (
     get_db, Base, init_db,
@@ -9,8 +13,11 @@ from app.database import (
 )
 from app import schemas
 from app.security import hash_password, verify_password
+from azure.storage.blob import BlobServiceClient, ContentSettings
+from azure.core.exceptions import ResourceNotFoundError
 
 settings = get_settings()
+blob_service_client: BlobServiceClient | None = None
 app = FastAPI(
     title="LamaCop API",
     description="Backend API for LamaCop Research Lab",
@@ -18,6 +25,27 @@ app = FastAPI(
 )
 
 init_db()
+
+
+def get_blob_service_client() -> BlobServiceClient:
+    global blob_service_client
+    if blob_service_client is not None:
+        return blob_service_client
+
+    if not settings.azure_storage_connection_string:
+        if not settings.azure_storage_account_name or not settings.azure_storage_account_key:
+            raise HTTPException(status_code=503, detail="Azure Blob Storage is not configured")
+        account_url = f"https://{settings.azure_storage_account_name}.blob.core.windows.net"
+        blob_service_client = BlobServiceClient(account_url=account_url, credential=settings.azure_storage_account_key)
+        return blob_service_client
+
+    blob_service_client = BlobServiceClient.from_connection_string(settings.azure_storage_connection_string)
+    return blob_service_client
+
+
+def get_blob_name(filename: str, folder: str) -> str:
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", filename).strip("-_") or "file"
+    return f"{folder}/{uuid4().hex}-{safe_name}"
 
 # Add CORS middleware
 app.add_middleware(
@@ -40,6 +68,53 @@ app.add_middleware(
 def health_check():
     """Health check endpoint"""
     return {"status": "ok", "message": "LamaCop API is running"}
+
+
+@app.post(f"{settings.api_prefix}/uploads")
+async def upload_file(file: UploadFile = File(...), folder: str = Form("uploads")):
+    """Upload a file to Azure Blob Storage and return the blob path."""
+    service_client = get_blob_service_client()
+    container_client = service_client.get_container_client(settings.azure_storage_container_name)
+    try:
+        container_client.create_container()
+    except Exception:
+        pass
+
+    blob_name = get_blob_name(file.filename or "file", folder)
+    blob_client = container_client.get_blob_client(blob_name)
+    data = await file.read()
+    blob_client.upload_blob(
+        data,
+        overwrite=True,
+        content_settings=ContentSettings(content_type=file.content_type or "application/octet-stream"),
+    )
+    return {
+        "blob_name": blob_name,
+        "original_name": file.filename,
+        "content_type": file.content_type or "application/octet-stream",
+        "size": len(data),
+        "url": f"{settings.api_prefix}/uploads/{quote(blob_name)}",
+    }
+
+
+@app.get(f"{settings.api_prefix}/uploads/{{blob_path:path}}")
+def get_uploaded_file(blob_path: str):
+    """Stream a blob back to the client."""
+    service_client = get_blob_service_client()
+    container_client = service_client.get_container_client(settings.azure_storage_container_name)
+    blob_client = container_client.get_blob_client(blob_path)
+
+    try:
+        downloader = blob_client.download_blob()
+    except ResourceNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    props = blob_client.get_blob_properties()
+    stream = downloader.chunks()
+    headers = {
+        "Content-Disposition": f'inline; filename="{blob_path.split("/")[-1]}"'
+    }
+    return StreamingResponse(stream, media_type=props.content_settings.content_type or "application/octet-stream", headers=headers)
 
 
 # ==================== Users ====================
@@ -74,7 +149,7 @@ def login_user(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    if user.password_hash != payload.password:
+    if not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid password")
     return user
 
@@ -100,8 +175,6 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db.refresh(new_user)
     return new_user
 
-
-@app.post(f"{settings.api_prefix}/auth/login", response_model=schemas.LoginResponse)
 
 
 @app.put(f"{settings.api_prefix}/users/{{user_id}}", response_model=schemas.User)
