@@ -134,9 +134,7 @@ export default function SiteHeader() {
           </div>
         )}
 
-        <div className="pb-3 text-xs text-slate-500">
-          Faculté des Sciences de Sfax · LR/01/ES-25
-        </div>
+        
       </div>
     </header>
   )
